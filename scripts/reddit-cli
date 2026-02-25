@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if [[ $# -lt 1 ]]; then
+  echo "Usage: $0 <login|whoami|my-comments|my-replies|my-posts|my-subreddits|subscribe|read|search|like|post|like-target|post-comment> [args...]"
+  exit 1
+fi
+
+OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+ARCH_RAW="$(uname -m | tr '[:upper:]' '[:lower:]')"
+case "$ARCH_RAW" in
+  x86_64|amd64)
+    ARCH="amd64"
+    ;;
+  arm64|aarch64)
+    ARCH="arm64"
+    ;;
+  *)
+    ARCH="$ARCH_RAW"
+    ;;
+esac
+
+BIN_DEFAULT="$ROOT/bin/redditcli-${OS}-${ARCH}"
+BIN_PATH="${REDDITCLI_BIN:-$BIN_DEFAULT}"
+
+if [[ ! -x "$BIN_PATH" ]]; then
+  echo "Missing binary: $BIN_PATH"
+  echo "Available binaries:"
+  ls -1 "$ROOT/bin" | sed 's/^/  - /'
+  exit 1
+fi
+
+SUBCOMMAND="$1"
+shift || true
+
+CMD=("$BIN_PATH")
+
+if [[ -n "${REDDIT_PROXY:-}" ]]; then
+  CMD+=("--proxy" "$REDDIT_PROXY")
+fi
+if [[ -n "${REDDIT_USER_AGENT:-}" ]]; then
+  CMD+=("--user-agent" "$REDDIT_USER_AGENT")
+fi
+if [[ -n "${REDDIT_ACCESS_TOKEN:-}" ]]; then
+  CMD+=("--token" "$REDDIT_ACCESS_TOKEN")
+fi
+if [[ -n "${REDDIT_BROWSER_PROFILE:-}" ]]; then
+  CMD+=("--browser-profile" "$REDDIT_BROWSER_PROFILE")
+fi
+if [[ "${REDDIT_HEADLESS:-0}" == "1" ]]; then
+  CMD+=("--browser-headless")
+fi
+if [[ -n "${REDDIT_LOGIN_TIMEOUT_SEC:-}" ]]; then
+  CMD+=("--login-timeout" "$REDDIT_LOGIN_TIMEOUT_SEC")
+fi
+if [[ -n "${REDDIT_HOLD_ON_ERROR_SEC:-}" ]]; then
+  CMD+=("--hold-on-error" "$REDDIT_HOLD_ON_ERROR_SEC")
+fi
+if [[ -n "${REDDIT_CHROME_PATH:-}" ]]; then
+  export CHROME_PATH="$REDDIT_CHROME_PATH"
+fi
+
+case "$SUBCOMMAND" in
+  login|whoami|my-comments|my-replies|my-posts|my-subreddits|subscribe|read|search|like|post)
+    exec "${CMD[@]}" "$SUBCOMMAND" "$@"
+    ;;
+  like-target)
+    if [[ -z "${REDDIT_THING_ID:-}" && -z "${REDDIT_PERMALINK:-}" ]]; then
+      echo "Missing REDDIT_THING_ID or REDDIT_PERMALINK"
+      exit 1
+    fi
+
+    LIKE_CMD=("${CMD[@]}" "like")
+    if [[ -n "${REDDIT_THING_ID:-}" ]]; then
+      LIKE_CMD+=("--thing" "$REDDIT_THING_ID")
+    fi
+    if [[ -n "${REDDIT_PERMALINK:-}" ]]; then
+      LIKE_CMD+=("--permalink" "$REDDIT_PERMALINK")
+    fi
+    if [[ "${REDDIT_DRY_RUN:-0}" == "1" ]]; then
+      LIKE_CMD+=("--dry-run")
+    fi
+    if [[ "${REDDIT_CONFIRM_LIKE:-0}" == "1" ]]; then
+      LIKE_CMD+=("--confirm-like")
+    fi
+    if [[ "${REDDIT_DRY_RUN:-0}" != "1" && "${REDDIT_CONFIRM_LIKE:-0}" != "1" ]]; then
+      echo "Refusing to like without explicit confirmation. Set REDDIT_CONFIRM_LIKE=1 or REDDIT_DRY_RUN=1."
+      exit 1
+    fi
+
+    exec "${LIKE_CMD[@]}"
+    ;;
+  post-comment)
+    if [[ -z "${REDDIT_THING_ID:-}" ]]; then
+      echo "Missing REDDIT_THING_ID"
+      exit 1
+    fi
+    if [[ -z "${REDDIT_PERMALINK:-}" ]]; then
+      echo "Missing REDDIT_PERMALINK"
+      exit 1
+    fi
+    if [[ -z "${REDDIT_TEXT:-}" ]]; then
+      echo "Missing REDDIT_TEXT"
+      exit 1
+    fi
+
+    REQUIRE_VERIFIED="${REDDIT_REQUIRE_VERIFIED:-true}"
+    VERIFY_TIMEOUT="${REDDIT_VERIFY_TIMEOUT_SEC:-30}"
+
+    POST_CMD=(
+      "${CMD[@]}"
+      "post"
+      "--kind" "comment"
+      "--parent" "$REDDIT_THING_ID"
+      "--permalink" "$REDDIT_PERMALINK"
+      "--text" "$REDDIT_TEXT"
+      "--require-verified=$REQUIRE_VERIFIED"
+      "--verify-timeout" "$VERIFY_TIMEOUT"
+    )
+
+    if [[ "${REDDIT_DRY_RUN:-0}" == "1" ]]; then
+      POST_CMD+=("--dry-run")
+    fi
+    if [[ "${REDDIT_CONFIRM_DOUBLE_POST:-0}" == "1" ]]; then
+      POST_CMD+=("--confirm-double-post")
+    fi
+
+    exec "${POST_CMD[@]}"
+    ;;
+  *)
+    echo "Unknown subcommand: $SUBCOMMAND"
+    echo "Usage: $0 <login|whoami|my-comments|my-replies|my-posts|my-subreddits|subscribe|read|search|like|post|like-target|post-comment> [args...]"
+    exit 1
+    ;;
+esac

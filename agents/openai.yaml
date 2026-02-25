@@ -1,0 +1,4 @@
+interface:
+  display_name: "Reddit CLI"
+  short_description: "Bundled Reddit CLI skill for OpenClaw workflows."
+  default_prompt: "Use the bundled redditcli binary to verify login, inspect account activity, and execute human-in-the-loop likes and safe comment posting."
