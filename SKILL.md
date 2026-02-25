@@ -11,6 +11,10 @@ This skill runs a prebuilt `redditcli` binary bundled in `bin/`.
 
 1. Verify login/session:
    `scripts/reddit-cli whoami`
+   Optional automatic login:
+   `scripts/reddit-cli login --username "<reddit-username-or-email>" --password "<reddit-password>"`
+   Safer password input:
+   `printf '%s' "$REDDIT_LOGIN_PASSWORD" | scripts/reddit-cli login --username "<reddit-username-or-email>" --password-stdin`
 2. Review account activity:
    `scripts/reddit-cli my-comments --limit 20`
    `scripts/reddit-cli my-replies --limit 20`
